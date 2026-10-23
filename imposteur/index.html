@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>IMPOSTEUR — Jeu entre amis</title>
+<style>
+:root{color-scheme:dark;--bg:#101522;--panel:#1c2536;--muted:#aab4c5;--accent:#a78bfa;--green:#5ee0a0;--red:#ff7185}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#263253 0,#101522 54%);color:#f7f8fc;font:16px system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh;padding:24px 14px 40px}
+main{max-width:620px;margin:auto}.brand{text-align:center;margin:8px 0 24px}.brand .icon{font-size:44px}.brand h1{font-size:clamp(2rem,9vw,3.2rem);letter-spacing:.12em;margin:0}.brand p{color:var(--muted);margin:4px 0}
+.card{background:#1b2435ed;border:1px solid #ffffff18;border-radius:20px;padding:20px;margin:14px 0;box-shadow:0 12px 36px #0003}.hidden{display:none!important}
+h2{margin:0 0 14px;font-size:1.25rem}label{display:block;color:#d2d8e4;font-size:.92rem;margin:12px 0 6px}
+input,select,button{font:inherit;border-radius:12px}input,select{width:100%;background:#111827;color:white;border:1px solid #46516a;padding:12px 14px}
+button{border:0;padding:13px 16px;font-weight:750;cursor:pointer;color:#171326;background:var(--accent);width:100%;margin-top:10px}
+button.secondary{background:#313d53;color:white}button.good{background:var(--green)}button.danger{background:#df5e74;color:white}button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.muted,.hint{color:var(--muted);font-size:.9rem;line-height:1.45}.status{padding:11px 13px;border-radius:12px;background:#111827;color:#d9e0ed;margin:12px 0}.status.error{color:#ffd0d8;border:1px solid #ff718555}.player{display:flex;justify-content:space-between;padding:9px 11px;background:#111827;border-radius:10px;margin:6px 0}.badge{color:#c4b5fd;font-size:.86rem}
+.big{font-size:clamp(1.7rem,9vw,3.1rem);font-weight:850;text-align:center;padding:25px 8px}.role{padding:24px;border-radius:16px;text-align:center;background:#111827;border:1px solid #ffffff1c}.role .symbol{font-size:44px}.role p{color:var(--muted)}.vote{display:flex;align-items:center;justify-content:space-between;background:#111827;border-radius:10px;padding:10px;margin:7px 0}.vote button{width:auto;padding:8px 12px;margin:0}.copy{overflow-wrap:anywhere}.footer{text-align:center;color:#8994a8;font-size:.8rem;margin-top:22px}
+</style>
+</head>
+<body><main>
+<header class="brand"><div class="icon">🕵️</div><h1>IMPOSTEUR</h1><p>Un mot secret. Un imposteur. Qui le trouvera ?</p></header>
+<section id="home" class="card">
+<h2>Jouer ensemble</h2>
+<p class="hint">Crée une salle et partage son code avec tes amis. Ils doivent garder cette page ouverte sur leur téléphone.</p>
+<div class="row"><button id="create">Créer une salle</button><button id="joinToggle" class="secondary">Rejoindre</button></div>
+<div id="joinBox" class="hidden"><label for="roomInput">Code de la salle</label><input id="roomInput" autocomplete="off" placeholder="Ex. IMP-123456"><button id="join">Entrer dans la salle</button></div>
+<div id="statusHome" class="status" aria-live="polite">Prêt à jouer. 3 joueurs minimum.</div>
+<p class="hint">Partie de 3 à 12 joueurs • Le mot reste privé sur chaque téléphone.</p>
+</section>
+<section id="lobby" class="card hidden">
+<h2>Salle <span id="roomLabel" class="badge"></span></h2><p class="hint">Envoie ce lien à tes amis :</p>
+<div id="shareLink" class="status copy"></div><button id="copyLink" class="secondary">Copier le lien</button>
+<h2 style="margin-top:20px">Joueurs (<span id="count">1</span>/12)</h2><div id="players"></div>
+<div id="hostControls"><label for="category">Thème des mots</label><select id="category"><option value="mix">Surprise</option><option value="animaux">Animaux</option><option value="lieux">Lieux et vacances</option><option value="nourriture">Nourriture</option><option value="objets">Objets</option></select><button id="start" class="good" disabled>Lancer la partie</button></div>
+<button id="leave" class="secondary">Quitter la salle</button>
+</section>
+<section id="game" class="card hidden">
+<h2 id="phaseTitle">Ton rôle</h2>
+<div id="secret" class="role"><div class="symbol">🔒</div><p>Appuie pour découvrir ton rôle. Garde ton écran secret !</p><button id="reveal">Voir mon rôle</button></div>
+<div id="gameInfo" class="status hidden"></div>
+<div id="voting" class="hidden"><h2>Qui est l’imposteur ?</h2><div id="voteList"></div><p id="voteStatus" class="hint"></p></div>
+<div id="result" class="hidden"></div><button id="nextRound" class="good hidden">Nouvelle manche</button>
+</section>
+<div class="footer">IMPOSTEUR • Jeu entre amis</div>
+</main>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(()=> {
+const $=id=>document.getElementById(id);
+const categories={
+animaux:[["lion","tigre"],["chat","chien"],["dauphin","baleine"],["abeille","guêpe"],["panda","koala"],["renard","loup"]],
+lieux:[["Paris","Lyon"],["plage","piscine"],["école","université"],["montagne","forêt"],["cinéma","théâtre"],["aéroport","gare"]],
+nourriture:[["pizza","quiche"],["crêpe","gaufre"],["mangue","ananas"],["café","thé"],["burger","sandwich"],["fraise","framboise"]],
+objets:[["téléphone","tablette"],["stylo","crayon"],["vélo","trottinette"],["canapé","fauteuil"],["lunettes","jumelles"],["montre","bracelet"]]
+};
+let peer=null,conn=null,isHost=false,roomId="",myId="",players=[],roles={},word="",phase="lobby",voted=false,votes={};
+const show=(id,on)=>$(id).classList.toggle("hidden",!on);
+function say(msg,error=false){$("statusHome").textContent=msg;$("statusHome").classList.toggle("error",error)}
+function safeClose(){if(conn){conn.close();conn=null}if(peer){peer.destroy();peer=null}}
+function renderPlayers(){$("players").innerHTML=players.map(p=>'<div class="player"><span>'+escapeHtml(p.name)+(p.id===myId?' (toi)':'')+'</span><span class="badge">'+(p.id===roomId?'Hôte':'Connecté')+'</span></div>').join("");$("count").textContent=players.length;$("start").disabled=!isHost||players.length<3}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function identity(){return (localStorage.getItem("imp_name")||"").trim()||("Joueur "+Math.floor(10+Math.random()*90))}
+function onRoom(){show("home",false);show("lobby",true);$("roomLabel").textContent=roomId;$("shareLink").textContent=location.origin+location.pathname+"?room="+encodeURIComponent(roomId);$("hostControls").classList.toggle("hidden",!isHost);renderPlayers()}
+function message(data){if(!data||typeof data!=="object")return;
+if(data.type==="welcome"){myId=data.id;players=data.players||[];onRoom();return}
+if(data.type==="players"){players=data.players||[];renderPlayers();return}
+if(data.type==="start"){phase="secret";roles=data.roles||{};word=data.word||"";votes={};voted=false;show("lobby",false);show("game",true);show("secret",true);show("gameInfo",false);show("voting",false);show("result",false);show("nextRound",false);$("phaseTitle").textContent="Découvre ton rôle";return}
+if(data.type==="voteUpdate"){$("voteStatus").textContent=data.count+" / "+data.total+" votes reçus";return}
+if(data.type==="result"){phase="result";show("voting",false);show("result",true);$("result").innerHTML='<div class="big">'+(data.impostorCaught?'🎉 Bien joué !':'🕵️ L’imposteur a gagné')+'</div><p class="hint">Le mot était <strong>'+escapeHtml(data.word)+'</strong>. L’imposteur : <strong>'+escapeHtml(data.impostorName)+'</strong>.</p>';show("nextRound",isHost);return}
+if(data.type==="error"){say(data.message||"Connexion impossible.",true)}
+}
+function send(data){if(isHost){broadcast(data);message(data)}else if(conn&&conn.open)conn.send(data)}
+function broadcast(data){for(const c of peer.connections[roomId]||[])if(c.open)c.send(data)}
+function beginRoom(){safeClose();isHost=true;roomId="IMP-"+Math.random().toString(36).slice(2,8).toUpperCase();myId=roomId;players=[{id:myId,name:identity()}];say("Création de la salle…");peer=new Peer(roomId);peer.on("open",()=>{onRoom();say("Salle prête. Partage le lien avec tes amis.")});peer.on("connection",c=>{c.on("data",d=>{if(d.type==="hello"){if(players.length>=12){c.send({type:"error",message:"La salle est complète."});c.close();return}if(!players.some(p=>p.id===c.peer)){players.push({id:c.peer,name:String(d.name||"Joueur").slice(0,24)});c.send({type:"welcome",id:c.peer,players});broadcast({type:"players",players});renderPlayers()}}else if(d.type==="vote"){votes[d.from]=d.target;const total=players.length-1;if(Object.keys(votes).length>=total)finishRound();else broadcast({type:"voteUpdate",count:Object.keys(votes).length,total})}else if(d.type==="leave"){players=players.filter(p=>p.id!==c.peer);broadcast({type:"players",players});renderPlayers()}})});peer.on("error",e=>say("Connexion indisponible : "+(e.type==="unavailable-id"?"réessaie de créer la salle.":"vérifie ta connexion Internet."),true))}
+function joinRoom(code){safeClose();isHost=false;roomId=code.trim().toUpperCase();say("Connexion à la salle "+roomId+"…");peer=new Peer();peer.on("open",id=>{myId=id;conn=peer.connect(roomId,{reliable:true});conn.on("open",()=>conn.send({type:"hello",name:identity()}));conn.on("data",message);conn.on("error",()=>say("Impossible de rejoindre cette salle.",true));conn.on("close",()=>say("La connexion avec la salle est coupée.",true))});peer.on("error",()=>say("Salle introuvable ou connexion bloquée. Demande à l’hôte de recréer une salle.",true))}
+function startRound(){if(players.length<3)return;const keys=Object.keys(categories);let key=$("category").value;if(key==="mix")key=keys[Math.floor(Math.random()*keys.length)];const pair=categories[key][Math.floor(Math.random()*categories[key].length)];word=pair[0];const impostor=players[Math.floor(Math.random()*players.length)];roles={};players.forEach((p,i)=>roles[p.id]=i===players.indexOf(impostor)?{impostor:true}:{impostor:false,word});phase="secret";votes={};voted=false;show("lobby",false);show("game",true);show("secret",true);show("gameInfo",false);show("voting",false);show("result",false);show("nextRound",false);$("phaseTitle").textContent="Découvre ton rôle";broadcast({type:"start",roles,word});message({type:"start",roles,word})}
+function reveal(){const r=roles[myId];if(!r){$("secret").innerHTML='<p>Ton rôle n’a pas été reçu. Reconnecte-toi à la salle.</p>';return}show("secret",false);show("gameInfo",true);$("gameInfo").innerHTML=r.impostor?'<div class="big">🕵️ IMPOSTEUR</div><p>Tu n’as pas le mot secret. Fais semblant de le connaître !</p>':'<div class="big">'+escapeHtml(r.word)+'</div><p>Tu connais le mot. Trouve l’imposteur sans le révéler.</p>';if(isHost){phase="discussion";setTimeout(()=>{if(phase==="discussion")openVoting()},70000)}else phase="discussion"}
+function openVoting(){if(phase!=="discussion")return;phase="voting";show("voting",true);$("voteList").innerHTML=players.filter(p=>p.id!==myId).map(p=>'<div class="vote"><span>'+escapeHtml(p.name)+'</span><button data-vote="'+escapeHtml(p.id)+'">Voter</button></div>').join("");$("voteList").querySelectorAll("[data-vote]").forEach(b=>b.onclick=()=>castVote(b.dataset.vote));$("voteStatus").textContent="Choisis la personne que tu soupçonnes."}
+function castVote(target){if(voted||phase!=="voting")return;voted=true;document.querySelectorAll("#voteList button").forEach(b=>b.disabled=true);if(isHost){votes[myId]=target;broadcast({type:"voteUpdate",count:Object.keys(votes).length,total:players.length-1});if(Object.keys(votes).length>=players.length-1)finishRound()}else conn.send({type:"vote",from:myId,target});$("voteStatus").textContent="Vote envoyé. En attente des autres…"}
+function finishRound(){if(phase!=="voting")phase="voting";const tally={};Object.values(votes).forEach(id=>tally[id]=(tally[id]||0)+1);const top=Object.entries(tally).sort((a,b)=>b[1]-a[1])[0];const caught=top&&roles[top[0]]&&roles[top[0]].impostor;const imp=players.find(p=>roles[p.id]&&roles[p.id].impostor);const result={type:"result",impostorCaught:!!caught,word,impostorName:imp?imp.name:"?"};broadcast(result);message(result);phase="result"}
+$("create").onclick=beginRoom;$("joinToggle").onclick=()=>show("joinBox",true);$("join").onclick=()=>joinRoom($("roomInput").value);$("start").onclick=startRound;$("reveal").onclick=reveal;$("copyLink").onclick=async()=>{try{await navigator.clipboard.writeText($("shareLink").textContent);$("copyLink").textContent="Lien copié !";setTimeout(()=>$("copyLink").textContent="Copier le lien",1800)}catch{$("copyLink").textContent="Sélectionne et copie le lien"}};$("leave").onclick=()=>{if(!isHost&&conn&&conn.open)conn.send({type:"leave"});safeClose();players=[];roomId="";isHost=false;show("lobby",false);show("game",false);show("home",true);say("Tu as quitté la salle.")};$("nextRound").onclick=()=>{show("game",false);show("lobby",true);phase="lobby";renderPlayers()};$("voting").addEventListener("dblclick",openVoting);
+const room=new URLSearchParams(location.search).get("room");if(room){show("joinBox",true);$("roomInput").value=room;$("joinToggle").textContent="Rejoindre la partie";$("joinToggle").onclick=()=>joinRoom(room)}
+})();
+</script></body></html>
