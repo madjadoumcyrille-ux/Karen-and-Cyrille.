@@ -49,7 +49,7 @@ button.secondary{background:#313d53;color:white}button.good{background:var(--gre
 (()=>{
 const RELAY="wss://imposteur-relay.onrender.com/";
 const $=id=>document.getElementById(id),show=(id,on)=>$(id).classList.toggle("hidden",!on);
-let socket=null,isHost=false,roomCode="",myId="",players=[],role=null,phase="home",voted=false;
+let socket=null,heartbeat=null,isHost=false,roomCode="",myId="",players=[],role=null,phase="home",voted=false;
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function name(){const n=$("nameInput").value.trim().slice(0,24);if(n)localStorage.setItem("imp_name",n);return n||localStorage.getItem("imp_name")||"Joueur "+Math.floor(10+Math.random()*90)}
 function status(message,error=false){$("statusHome").textContent=message;$("statusHome").classList.toggle("error",error);$("lobbyStatus").textContent=message;$("lobbyStatus").classList.toggle("error",error)}
@@ -62,7 +62,7 @@ function connect(action,code=""){
  socket.onopen=()=>socket.send(JSON.stringify(action==="create"?{type:"create",name:name()}:{type:"join",code,name:name()}));
  socket.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}handle(d)};
  socket.onerror=()=>status("Le relais ne répond pas. Réessaie dans quelques secondes.",true);
- socket.onclose=()=>{if(phase!=="home")status("Connexion coupée. Recharge la page et recrée la salle.",true)};
+ socket.onclose=()=>{clearInterval(heartbeat);if(phase!=="home")status("Connexion coupée. Recharge la page et recrée la salle.",true)};
 }
 function send(data){if(socket&&socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify(data));else status("Connexion coupée. Recharge la page pour recommencer.",true)}
 function handle(d){
